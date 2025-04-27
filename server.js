@@ -116,7 +116,7 @@ app.get('/check-auth', (req, res) => {
 
 // Serve the form page
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Protect the generate endpoint with authentication
