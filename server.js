@@ -8,9 +8,10 @@ const Docxtemplater = require('docxtemplater');
 const session = require('express-session');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
+const cors = require('cors');
 
 const app = express();
-const port = 8000;
+const port = process.env.PORT || 8000;
 
 // Set up storage for multer
 const upload = multer();
@@ -18,29 +19,49 @@ const upload = multer();
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-app.use(express.static('public'));
+app.use(express.static(__dirname)); // Serve files from root directory
 
-// Generate a random session secret on server startup
-const sessionSecret = crypto.randomBytes(64).toString('hex');
+// CORS configuration
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:8000',
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+// Generate a random session secret on server startup if not provided
+const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(64).toString('hex');
 
 // Session configuration
 app.use(session({
-    secret: process.env.SESSION_SECRET || sessionSecret,
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: { 
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
         maxAge: 2 * 60 * 60 * 1000, // 2 hours
-        sameSite: 'strict'
-    }
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+    },
+    // For production, consider using a session store like connect-pg-simple
+    store: process.env.NODE_ENV === 'production' && process.env.DATABASE_URL ? 
+        (() => {
+            const pgSession = require('connect-pg-simple')(session);
+            return new pgSession({
+                conString: process.env.DATABASE_URL,
+                createTableIfMissing: true
+            });
+        })() : 
+        undefined
 }));
 
 // Rate limiting for login attempts
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 5, // limit each IP to 5 login attempts per windowMs
-    message: { success: false, message: 'Too many login attempts, please try again later' }
+    message: { success: false, message: 'Too many login attempts, please try again later' },
+    standardHeaders: true,
+    legacyHeaders: false
 });
 
 // Simple admin credentials stored on the server (not visible to client)
@@ -52,12 +73,22 @@ const ADMIN_CREDENTIALS = {
 // Authentication middleware
 const requireAuth = (req, res, next) => {
     if (req.session.authenticated) {
+        // Verify the user agent hasn't changed
+        if (req.session.userAgent !== req.headers['user-agent']) {
+            req.session.destroy();
+            return res.status(401).json({ error: 'Session invalid' });
+        }
         return next();
     }
     res.status(401).json({ error: 'Unauthorized' });
 };
 
-// Simplified login endpoint with plain text password comparison
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'healthy' });
+});
+
+// Login endpoint
 app.post('/login', loginLimiter, (req, res) => {
     const { username, password } = req.body;
     
@@ -86,18 +117,6 @@ app.post('/login', loginLimiter, (req, res) => {
     res.status(401).json({ success: false, message: 'Invalid credentials' });
 });
 
-// Add session verification
-app.use((req, res, next) => {
-    if (req.session.authenticated) {
-        // Verify the user agent hasn't changed
-        if (req.session.userAgent !== req.headers['user-agent']) {
-            req.session.destroy();
-            return res.status(401).json({ error: 'Session invalid' });
-        }
-    }
-    next();
-});
-
 // Logout endpoint
 app.post('/logout', (req, res) => {
     req.session.destroy(err => {
@@ -111,16 +130,19 @@ app.post('/logout', (req, res) => {
 
 // Check authentication status
 app.get('/check-auth', (req, res) => {
-    res.json({ authenticated: !!req.session.authenticated });
+    res.json({ 
+        authenticated: !!req.session.authenticated,
+        username: req.session.username || null
+    });
 });
 
-// Serve the form page
+// Serve the form page - now from root directory
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Protect the generate endpoint with authentication
-app.post('/generate', requireAuth, upload.none(), async (req, res) => {
+app.post('/generate', requireAuth, upload.single('template'), async (req, res) => {
     try {
         const { rupees, senderName, senderAddress, productData, phoneNumber, date } = req.body;
         
@@ -173,6 +195,16 @@ app.post('/generate', requireAuth, upload.none(), async (req, res) => {
     }
 });
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    });
+});
+
+// Start server
 app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+    console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode at http://localhost:${port}`);
 });

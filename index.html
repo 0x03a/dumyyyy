@@ -170,6 +170,9 @@
                 document.getElementById('username').value = '';
                 document.getElementById('password').value = '';
             }, 100);
+            
+            // Set default date to today
+            document.getElementById('date').valueAsDate = new Date();
         });
 
         // Check authentication on page load
@@ -178,6 +181,7 @@
                 const response = await fetch('/check-auth', {
                     method: 'GET',
                     headers: {
+                        'Accept': 'application/json',
                         'Cache-Control': 'no-cache, no-store, must-revalidate',
                         'Pragma': 'no-cache',
                         'Expires': '0'
@@ -196,6 +200,7 @@
                 }
             } catch (error) {
                 console.error('Auth check failed:', error);
+                // No need to show an error to the user - they'll just see the login form
             }
         })();
 
@@ -227,6 +232,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Accept': 'application/json',
                         'X-Requested-With': 'XMLHttpRequest'
                     },
                     body: JSON.stringify(credentials),
@@ -267,6 +273,7 @@
                 const response = await fetch('/logout', { 
                     method: 'POST',
                     headers: {
+                        'Accept': 'application/json',
                         'X-Requested-With': 'XMLHttpRequest'
                     },
                     credentials: 'include'
@@ -417,9 +424,6 @@
             }
         });
 
-        // Set default date to today
-        document.getElementById('date').valueAsDate = new Date();
-
         function showPostalForm() {
             document.getElementById('loginContainer').classList.add('hidden');
             document.getElementById('postalFormContainer').classList.remove('hidden');
@@ -441,7 +445,10 @@
                 if (document.getElementById('postalFormContainer').classList.contains('hidden') === false) {
                     fetch('/logout', { 
                         method: 'POST',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        headers: { 
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest' 
+                        },
                         credentials: 'include'
                     }).then(() => {
                         hidePostalForm();
