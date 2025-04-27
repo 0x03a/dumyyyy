@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'"> -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+    <title>Pakistan Postal Order Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-container {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .login-container {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        button {
+            background: #006600;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #005500;
+        }
+        #logoutBtn {
+            background: #cc0000;
+            margin-top: 10px;
+        }
+        #logoutBtn:hover {
+            background: #aa0000;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        .status-message {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .hidden {
+            display: none;
+        }
+        .error-message {
+            color: #a94442;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center; color: #006600;">Pakistan Postal Order</h1>
+    
+    <div class="login-container" id="loginContainer">
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" required autocomplete="off">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+                <div id="loginError" class="error-message hidden">Invalid username or password</div>
+            </div>
+            
+            <button type="submit" id="loginBtn">Login</button>
+        </form>
+    </div>
+    
+    <div class="form-container hidden" id="postalFormContainer">
+        <button id="logoutBtn">Logout</button>
+        <form id="postalForm">
+            <div class="form-group">
+                <label for="rupees">Rupees:</label>
+                <input type="number" id="rupees" name="rupees" required autocomplete="off">
+                <div id="rupeesError" class="error-message hidden">Please enter a valid amount</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="senderName">Sender Name:</label>
+                <input type="text" id="senderName" name="senderName" required autocomplete="off">
+                <div id="nameError" class="error-message hidden">Please enter sender name</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="senderAddress">Sender Complete Address:</label>
+                <textarea id="senderAddress" name="senderAddress" required autocomplete="off"></textarea>
+                <div id="addressError" class="error-message hidden">Please enter complete address</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="productData">Product Info:</label>
+                <textarea id="productData" name="productData" required autocomplete="off" placeholder="Enter product details here"></textarea>
+                <div id="productError" class="error-message hidden">Please enter product information</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="phoneNumber">Phone Number (11 digits):</label>
+                <input type="tel" id="phoneNumber" name="phoneNumber" 
+                       placeholder="03337777777"
+                       pattern="[0-9]{11}"
+                       required
+                       autocomplete="off">
+                <div id="phoneError" class="error-message hidden">Please enter a valid 11-digit phone number (numbers only)</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="date">Date:</label>
+                <input type="date" id="date" name="date" required autocomplete="off">
+                <div id="dateError" class="error-message hidden">Please select a date</div>
+            </div>
+            
+            <button type="submit" id="submitBtn">Generate Postal Order</button>
+            
+            <div id="statusMessage" class="status-message hidden"></div>
+        </form>
+    </div>
+
+    <script>
+        // Prevent form autocomplete and browser password saving
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set timeout to ensure the browser's autofill doesn't persist
+            setTimeout(() => {
+                document.getElementById('username').value = '';
+                document.getElementById('password').value = '';
+            }, 100);
+        });
+
+        // Check authentication on page load
+        (async function checkAuth() {
+            try {
+                const response = await fetch('/check-auth', {
+                    method: 'GET',
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
+                    },
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Authentication check failed');
+                }
+                
+                const data = await response.json();
+                
+                if (data.authenticated) {
+                    showPostalForm();
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+            }
+        })();
+
+        // Login form handling with secure practices
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const usernameInput = document.getElementById('username').value.trim();
+            const passwordInput = document.getElementById('password').value;
+            const loginError = document.getElementById('loginError');
+            const loginBtn = document.getElementById('loginBtn');
+            
+            // Don't leave password in memory longer than necessary
+            const credentials = {
+                username: usernameInput,
+                password: passwordInput
+            };
+            
+            // Clear password field for security
+            document.getElementById('password').value = '';
+            
+            // Show loading state
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Logging in...';
+            loginError.classList.add('hidden');
+            
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest' // Helps prevent CSRF
+                    },
+                    body: JSON.stringify(credentials),
+                    credentials: 'include' // Include cookies in the request
+                });
+                
+                // Immediately clear credentials from memory
+                for (let prop in credentials) {
+                    credentials[prop] = null;
+                }
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Login failed');
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showPostalForm();
+                    loginError.classList.add('hidden');
+                } else {
+                    throw new Error(result.message || 'Login failed');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                loginError.textContent = error.message || 'Invalid username or password';
+                loginError.classList.remove('hidden');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
+            }
+        });
+
+        // Logout handling
+        document.getElementById('logoutBtn').addEventListener('click', async function() {
+            try {
+                const response = await fetch('/logout', { 
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    hidePostalForm();
+                } else {
+                    console.error('Logout failed');
+                }
+            } catch (error) {
+                console.error('Logout failed:', error);
+            }
+        });
+
+        // Postal form handling
+        document.getElementById('postalForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const form = e.target;
+            const submitBtn = document.getElementById('submitBtn');
+            const statusMessage = document.getElementById('statusMessage');
+            
+            // Hide all error messages
+            document.querySelectorAll('.error-message').forEach(el => {
+                el.classList.add('hidden');
+            });
+            
+            // Validate all fields
+            let isValid = true;
+            
+            // Validate Rupees
+            const rupees = document.getElementById('rupees').value;
+            if (!rupees || isNaN(rupees) || parseInt(rupees) < 1) {
+                document.getElementById('rupeesError').classList.remove('hidden');
+                isValid = false;
+            }
+            
+            // Validate Name
+            const senderName = document.getElementById('senderName').value.trim();
+            if (!senderName) {
+                document.getElementById('nameError').classList.remove('hidden');
+                isValid = false;
+            }
+            
+            // Validate Address
+            const senderAddress = document.getElementById('senderAddress').value.trim();
+            if (!senderAddress) {
+                document.getElementById('addressError').classList.remove('hidden');
+                isValid = false;
+            }
+            
+            // Validate Product Info
+            const productData = document.getElementById('productData').value.trim();
+            if (!productData) {
+                document.getElementById('productError').classList.remove('hidden');
+                isValid = false;
+            }
+            
+            // Validate Phone (exactly 11 digits)
+            const phoneNumber = document.getElementById('phoneNumber').value.replace(/\D/g, '');
+            if (!phoneNumber || phoneNumber.length !== 11 || !/^\d+$/.test(phoneNumber)) {
+                document.getElementById('phoneError').classList.remove('hidden');
+                isValid = false;
+            }
+            
+            // Validate Date
+            const date = document.getElementById('date').value;
+            if (!date) {
+                document.getElementById('dateError').classList.remove('hidden');
+                isValid = false;
+            }
+            
+            if (!isValid) {
+                return;
+            }
+            
+            // Show loading state
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Generating...';
+            statusMessage.classList.add('hidden');
+            
+            try {
+                const formData = new FormData(form);
+                formData.set('phoneNumber', phoneNumber);
+                
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: formData,
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'postal-order.docx';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    
+                    statusMessage.textContent = 'Document generated successfully! Form has been reset.';
+                    statusMessage.className = 'status-message success';
+                    statusMessage.classList.remove('hidden');
+                    
+                    form.reset();
+                    document.getElementById('date').valueAsDate = new Date();
+                } else {
+                    let errorMessage = 'Failed to generate document';
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.message || errorMessage;
+                    } catch (e) {
+                        // If JSON parsing fails, use the default error message
+                    }
+                    throw new Error(errorMessage);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                statusMessage.textContent = error.message || 'An error occurred while generating the document';
+                statusMessage.className = 'status-message error';
+                statusMessage.classList.remove('hidden');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Generate Postal Order';
+                
+                setTimeout(() => {
+                    statusMessage.classList.add('hidden');
+                }, 5000);
+            }
+        });
+
+        // Phone number input validation
+        document.getElementById('phoneNumber').addEventListener('input', function(e) {
+            let phoneNumber = e.target.value.replace(/\D/g, '');
+            if (phoneNumber.length > 11) {
+                phoneNumber = phoneNumber.substring(0, 11);
+            }
+            e.target.value = phoneNumber;
+            
+            if (phoneNumber.length === 11) {
+                document.getElementById('phoneError').classList.add('hidden');
+            }
+        });
+
+        // Set default date to today
+        document.getElementById('date').valueAsDate = new Date();
+
+        function showPostalForm() {
+            document.getElementById('loginContainer').classList.add('hidden');
+            document.getElementById('postalFormContainer').classList.remove('hidden');
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+        }
+
+        function hidePostalForm() {
+            document.getElementById('postalFormContainer').classList.add('hidden');
+            document.getElementById('loginContainer').classList.remove('hidden');
+        }
+
+        // Add idle timeout for security (auto logout after 30 minutes of inactivity)
+        let idleTimeout;
+        function resetIdleTimeout() {
+            clearTimeout(idleTimeout);
+            idleTimeout = setTimeout(() => {
+                // Auto logout after 30 minutes of inactivity
+                if (document.getElementById('postalFormContainer').classList.contains('hidden') === false) {
+                    fetch('/logout', { 
+                        method: 'POST',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        credentials: 'include'
+                    }).then(() => {
+                        hidePostalForm();
+                        alert('You have been logged out due to inactivity.');
+                    }).catch(console.error);
+                }
+            }, 30 * 60 * 1000); // 30 minutes
+        }
+
+        // Reset the idle timeout on any user interaction
+        ['click', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+            document.addEventListener(event, resetIdleTimeout, true);
+        });
+
+        // Initial idle timeout setup
+        resetIdleTimeout();
+    </script>
+</body>
+</html>
